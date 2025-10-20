@@ -4,11 +4,6 @@ interface ValidateAccessRequest {
   accessCode: string;
 }
 
-interface ValidateAccessResponse {
-  valid: boolean;
-  error?: string;
-  accessCode?: string;
-}
 
 export async function POST(request: Request): Promise<Response> {
   try {

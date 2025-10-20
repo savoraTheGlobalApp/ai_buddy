@@ -110,7 +110,7 @@ export function AccessCodeScreen({ onAccessGranted }: AccessCodeScreenProps) {
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Don't have an access code? Contact us at {" "}
+              Don&apos;t have an access code? Contact us at {" "}
               <a 
                 href="mailto:hello@icurious.ai" 
                 className="text-blue-600 dark:text-blue-400 hover:underline"
