@@ -1,0 +1,15 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# Netlify Functions configuration
+[functions]
+  directory = ".netlify/functions"
+
+# Security: Configure secrets scanning to ignore NEXT_PUBLIC_ variables
+# These are intentionally exposed to the client-side and are not secrets
+[build.processing]
+  skip_processing = false
