@@ -342,6 +342,9 @@ export function ChatKitPanel({
     hasError: Boolean(blockingError),
     workflowId: WORKFLOW_ID,
     blockingError,
+    widgetInstanceKey,
+    willShowChatKit: Boolean(chatkit.control),
+    willShowFallback: !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
   });
 
   // Force initialization if script is ready but ChatKit isn't responding
@@ -372,25 +375,37 @@ export function ChatKitPanel({
     }
   }, [chatkit.control, isInitializingSession]);
 
+  // Force re-render if ChatKit control exists but component isn't visible
+  useEffect(() => {
+    if (chatkit.control && scriptStatus === "ready" && !isInitializingSession) {
+      const timer = setTimeout(() => {
+        console.log("[ChatKitPanel] Force re-render after control available");
+        setWidgetInstanceKey(prev => prev + 1);
+      }, 2000); // Wait 2 seconds then force re-render
+
+      return () => clearTimeout(timer);
+    }
+  }, [chatkit.control, scriptStatus, isInitializingSession]);
+
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      <ChatKit
-        key={widgetInstanceKey}
-        control={chatkit.control}
-        className={
-          blockingError || isInitializingSession
-            ? "pointer-events-none opacity-0"
-            : "block h-full w-full"
-        }
-        style={{
-          minHeight: "400px",
-          width: "100%",
-          display: chatkit.control ? "block" : "none"
-        }}
-      />
+      {/* Always show ChatKit when control is available */}
+      {chatkit.control && (
+        <ChatKit
+          key={widgetInstanceKey}
+          control={chatkit.control}
+          style={{
+            minHeight: "400px",
+            width: "100%",
+            display: "block",
+            position: "relative",
+            zIndex: 1
+          }}
+        />
+      )}
       
-      {/* Fallback UI if ChatKit doesn't render */}
-      {!blockingError && !isInitializingSession && !chatkit.control && (
+      {/* Fallback UI - show when ChatKit control is not available */}
+      {!chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError && (
         <div className="flex h-full w-full items-center justify-center">
           <div className="text-center">
             <div className="mb-4 text-6xl">🤖</div>
