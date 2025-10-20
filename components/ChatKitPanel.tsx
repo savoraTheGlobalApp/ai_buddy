@@ -364,6 +364,14 @@ export function ChatKitPanel({
     }
   }, [scriptStatus, isInitializingSession]);
 
+  // Force ChatKit to render when control is available
+  useEffect(() => {
+    if (chatkit.control && isInitializingSession) {
+      console.log("[ChatKitPanel] ChatKit control available - ending initialization");
+      setIsInitializingSession(false);
+    }
+  }, [chatkit.control, isInitializingSession]);
+
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
       <ChatKit
@@ -374,7 +382,34 @@ export function ChatKitPanel({
             ? "pointer-events-none opacity-0"
             : "block h-full w-full"
         }
+        style={{
+          minHeight: "400px",
+          width: "100%",
+          display: chatkit.control ? "block" : "none"
+        }}
       />
+      
+      {/* Fallback UI if ChatKit doesn't render */}
+      {!blockingError && !isInitializingSession && !chatkit.control && (
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="text-center">
+            <div className="mb-4 text-6xl">🤖</div>
+            <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
+              AI Buddy is Ready!
+            </h2>
+            <p className="mb-4 text-gray-600 dark:text-gray-300">
+              The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
+            </p>
+            <button
+              onClick={handleResetChat}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+            >
+              Restart Chat
+            </button>
+          </div>
+        </div>
+      )}
+      
       <ErrorOverlay
         error={blockingError}
         fallbackMessage={
