@@ -55,11 +55,12 @@ export function ChatKitPanel({
   const isMountedRef = useRef(true);
   const [scriptStatus, setScriptStatus] = useState<
     "pending" | "ready" | "error"
-  >(() =>
-    isBrowser && window.customElements?.get("openai-chatkit")
-      ? "ready"
-      : "pending"
-  );
+  >(() => {
+    if (!isBrowser) return "pending";
+    const isReady = window.customElements?.get("openai-chatkit");
+    console.log("[ChatKitPanel] Initial script status check:", { isReady, customElements: !!window.customElements });
+    return isReady ? "ready" : "pending";
+  });
   const [widgetInstanceKey, setWidgetInstanceKey] = useState(0);
 
   const setErrorState = useCallback((updates: Partial<ErrorState>) => {
@@ -105,10 +106,13 @@ export function ChatKitPanel({
     );
 
     if (window.customElements?.get("openai-chatkit")) {
+      console.log("[ChatKitPanel] Script already loaded, calling handleLoaded");
       handleLoaded();
     } else if (scriptStatus === "pending") {
+      console.log("[ChatKitPanel] Script not ready, setting timeout");
       timeoutId = window.setTimeout(() => {
         if (!window.customElements?.get("openai-chatkit")) {
+          console.log("[ChatKitPanel] Script timeout - component not available");
           handleError(
             new CustomEvent("chatkit-script-error", {
               detail:
@@ -159,13 +163,12 @@ export function ChatKitPanel({
 
   const getClientSecret = useCallback(
     async (currentSecret: string | null) => {
-      if (isDev) {
-        console.info("[ChatKitPanel] getClientSecret invoked", {
-          currentSecretPresent: Boolean(currentSecret),
-          workflowId: WORKFLOW_ID,
-          endpoint: CREATE_SESSION_ENDPOINT,
-        });
-      }
+      console.log("[ChatKitPanel] getClientSecret invoked", {
+        currentSecretPresent: Boolean(currentSecret),
+        workflowId: WORKFLOW_ID,
+        endpoint: CREATE_SESSION_ENDPOINT,
+        isWorkflowConfigured,
+      });
 
       if (!isWorkflowConfigured) {
         const detail =
@@ -203,13 +206,11 @@ export function ChatKitPanel({
 
         const raw = await response.text();
 
-        if (isDev) {
-          console.info("[ChatKitPanel] createSession response", {
-            status: response.status,
-            ok: response.ok,
-            bodyPreview: raw.slice(0, 1600),
-          });
-        }
+        console.log("[ChatKitPanel] createSession response", {
+          status: response.status,
+          ok: response.ok,
+          bodyPreview: raw.slice(0, 1600),
+        });
 
         let data: Record<string, unknown> = {};
         if (raw) {
@@ -241,6 +242,7 @@ export function ChatKitPanel({
           setErrorState({ session: null, integration: null });
         }
 
+        console.log("[ChatKitPanel] Client secret received, ChatKit should initialize now");
         return clientSecret;
       } catch (error) {
         console.error("Failed to create ChatKit session", error);
@@ -333,15 +335,34 @@ export function ChatKitPanel({
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
 
-  if (isDev) {
-    console.debug("[ChatKitPanel] render state", {
-      isInitializingSession,
-      hasControl: Boolean(chatkit.control),
-      scriptStatus,
-      hasError: Boolean(blockingError),
-      workflowId: WORKFLOW_ID,
-    });
-  }
+  console.log("[ChatKitPanel] render state", {
+    isInitializingSession,
+    hasControl: Boolean(chatkit.control),
+    scriptStatus,
+    hasError: Boolean(blockingError),
+    workflowId: WORKFLOW_ID,
+    blockingError,
+  });
+
+  // Force initialization if script is ready but ChatKit isn't responding
+  useEffect(() => {
+    if (scriptStatus === "ready" && !chatkit.control && !isInitializingSession) {
+      console.log("[ChatKitPanel] Script ready but no control - forcing re-initialization");
+      setWidgetInstanceKey(prev => prev + 1);
+    }
+  }, [scriptStatus, chatkit.control, isInitializingSession]);
+
+  // Add a timeout to force ChatKit to show after getting client secret
+  useEffect(() => {
+    if (scriptStatus === "ready" && isInitializingSession) {
+      const timeout = setTimeout(() => {
+        console.log("[ChatKitPanel] Timeout reached - forcing ChatKit to show");
+        setIsInitializingSession(false);
+      }, 10000); // 10 second timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [scriptStatus, isInitializingSession]);
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
