@@ -170,6 +170,12 @@ export function ChatKitPanel({
         isWorkflowConfigured,
       });
 
+      // If we already have a secret, return it immediately
+      if (currentSecret) {
+        console.log("[ChatKitPanel] Using existing client secret");
+        return currentSecret;
+      }
+
       if (!isWorkflowConfigured) {
         const detail =
           "Set NEXT_PUBLIC_CHATKIT_WORKFLOW_ID in your .env.local file.";
@@ -181,9 +187,7 @@ export function ChatKitPanel({
       }
 
       if (isMountedRef.current) {
-        if (!currentSecret) {
-          setIsInitializingSession(true);
-        }
+        setIsInitializingSession(true);
         setErrorState({ session: null, integration: null, retryable: false });
       }
 
@@ -255,7 +259,7 @@ export function ChatKitPanel({
         }
         throw error instanceof Error ? error : new Error(detail);
       } finally {
-        if (isMountedRef.current && !currentSecret) {
+        if (isMountedRef.current) {
           setIsInitializingSession(false);
         }
       }
@@ -347,25 +351,20 @@ export function ChatKitPanel({
     willShowFallback: !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
   });
 
-  // Force initialization if script is ready but ChatKit isn't responding
-  useEffect(() => {
-    if (scriptStatus === "ready" && !chatkit.control && !isInitializingSession) {
-      console.log("[ChatKitPanel] Script ready but no control - forcing re-initialization");
-      setWidgetInstanceKey(prev => prev + 1);
-    }
-  }, [scriptStatus, chatkit.control, isInitializingSession]);
+  // Remove force re-initialization that causes infinite loops
+  // Let ChatKit initialize naturally
 
-  // Add a timeout to force ChatKit to show after getting client secret
+  // Add a timeout to prevent infinite loading
   useEffect(() => {
-    if (scriptStatus === "ready" && isInitializingSession) {
+    if (isInitializingSession) {
       const timeout = setTimeout(() => {
-        console.log("[ChatKitPanel] Timeout reached - forcing ChatKit to show");
+        console.log("[ChatKitPanel] Timeout reached - ending initialization");
         setIsInitializingSession(false);
-      }, 10000); // 10 second timeout
+      }, 15000); // 15 second timeout
 
       return () => clearTimeout(timeout);
     }
-  }, [scriptStatus, isInitializingSession]);
+  }, [isInitializingSession]);
 
   // Force ChatKit to render when control is available
   useEffect(() => {
@@ -375,17 +374,8 @@ export function ChatKitPanel({
     }
   }, [chatkit.control, isInitializingSession]);
 
-  // Force re-render if ChatKit control exists but component isn't visible
-  useEffect(() => {
-    if (chatkit.control && scriptStatus === "ready" && !isInitializingSession) {
-      const timer = setTimeout(() => {
-        console.log("[ChatKitPanel] Force re-render after control available");
-        setWidgetInstanceKey(prev => prev + 1);
-      }, 2000); // Wait 2 seconds then force re-render
-
-      return () => clearTimeout(timer);
-    }
-  }, [chatkit.control, scriptStatus, isInitializingSession]);
+  // Remove the force re-render that's causing the infinite loop
+  // The ChatKit component should render naturally when control is available
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
