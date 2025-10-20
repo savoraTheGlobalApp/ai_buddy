@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   STARTER_PROMPTS,
@@ -267,7 +267,8 @@ export function ChatKitPanel({
     [isWorkflowConfigured, setErrorState]
   );
 
-  const chatkit = useChatKit({
+  // Memoize the ChatKit configuration to prevent re-initialization
+  const chatkitConfig = useMemo(() => ({
     api: { getClientSecret },
     theme: {
       colorScheme: theme,
@@ -334,7 +335,9 @@ export function ChatKitPanel({
       // Thus, your app code doesn't need to display errors on UI.
       console.error("ChatKit error", error);
     },
-  });
+  }), [getClientSecret, theme, onThemeRequest, onWidgetAction, onResponseEnd, setErrorState]);
+
+  const chatkit = useChatKit(chatkitConfig);
 
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
@@ -377,10 +380,20 @@ export function ChatKitPanel({
   // Remove the force re-render that's causing the infinite loop
   // The ChatKit component should render naturally when control is available
 
+  // Track if ChatKit has ever been successfully initialized
+  const [hasInitialized, setHasInitialized] = useState(false);
+  
+  useEffect(() => {
+    if (chatkit.control && !hasInitialized) {
+      console.log("[ChatKitPanel] ChatKit successfully initialized");
+      setHasInitialized(true);
+    }
+  }, [chatkit.control, hasInitialized]);
+
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      {/* Always show ChatKit when control is available */}
-      {chatkit.control && (
+      {/* Show ChatKit if it has control OR if it has been initialized before */}
+      {(chatkit.control || hasInitialized) && (
         <ChatKit
           key={widgetInstanceKey}
           control={chatkit.control}
@@ -394,8 +407,8 @@ export function ChatKitPanel({
         />
       )}
       
-      {/* Fallback UI - show when ChatKit control is not available */}
-      {!chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError && (
+      {/* Fallback UI - only show if ChatKit has never been initialized */}
+      {!hasInitialized && !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError && (
         <div className="flex h-full w-full items-center justify-center">
           <div className="text-center">
             <div className="mb-4 text-6xl">🤖</div>
