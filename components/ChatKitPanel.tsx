@@ -397,75 +397,72 @@ const ChatKitPanelComponent = ({
     }
   }, [chatkit.control]);
 
-  // Only log on significant state changes
+  // Debug every render to see what's changing
   const renderCountRef = useRef(0);
+  const prevPropsRef = useRef({ theme, onWidgetAction, onResponseEnd, onThemeRequest });
   renderCountRef.current += 1;
   
-  if (renderCountRef.current % 5 === 0 || showChatKit) {
-    console.log("[ChatKitPanel] 🎨 RENDER #" + renderCountRef.current + ":", {
-      showChatKit,
-      hasControl: Boolean(chatkit.control),
-      isInitializingSession
-    });
-  }
+  console.log("[ChatKitPanel] 🎨 RENDER #" + renderCountRef.current + ":", {
+    showChatKit,
+    hasControl: Boolean(chatkit.control),
+    themeChanged: prevPropsRef.current.theme !== theme,
+    onWidgetActionChanged: prevPropsRef.current.onWidgetAction !== onWidgetAction,
+    onResponseEndChanged: prevPropsRef.current.onResponseEnd !== onResponseEnd,
+    onThemeRequestChanged: prevPropsRef.current.onThemeRequest !== onThemeRequest,
+  });
+  
+  prevPropsRef.current = { theme, onWidgetAction, onResponseEnd, onThemeRequest };
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      {/* Always show ChatKit once it has been initialized - never unmount */}
-      {showChatKit ? (
-        <>
-          <div style={{ position: 'absolute', top: 0, left: 0, padding: '5px', background: 'rgba(0,255,0,0.3)', zIndex: 9999, fontSize: '10px' }}>
-            DEBUG: ChatKit Mounted | control: {chatkit.control ? 'YES' : 'NO'}
-          </div>
-          <ChatKit
-            control={chatkit.control}
-            style={{
-              minHeight: "400px",
-              width: "100%",
-              display: "block",
-              position: "relative",
-              zIndex: 1
-            }}
-          />
-        </>
-      ) : (
-        <div style={{ position: 'absolute', top: 0, left: 0, padding: '5px', background: 'rgba(255,0,0,0.3)', zIndex: 9999, fontSize: '10px' }}>
-          DEBUG: ChatKit NOT Mounted | showChatKit: {String(showChatKit)}
-        </div>
-      )}
+      {/* Debug indicator */}
+      <div style={{ position: 'absolute', top: 0, left: 0, padding: '5px', background: showChatKit ? 'rgba(0,255,0,0.3)' : 'rgba(255,0,0,0.3)', zIndex: 9999, fontSize: '10px' }}>
+        DEBUG: ChatKit {showChatKit ? 'Mounted' : 'NOT Mounted'} | control: {chatkit.control ? 'YES' : 'NO'}
+      </div>
       
-      {/* Show loading state while initializing */}
-      {!showChatKit && isInitializingSession && !blockingError && (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="text-center">
-            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-300">Initializing chat session...</p>
-            <p className="text-xs text-gray-400 mt-2">DEBUG: Loading state active</p>
-          </div>
-        </div>
-      )}
+      {/* ALWAYS render ChatKit once initialized, use CSS to hide loading states */}
+      <div style={{ display: showChatKit ? 'block' : 'none', width: '100%', height: '100%' }}>
+        <ChatKit
+          control={chatkit.control}
+          style={{
+            minHeight: "400px",
+            width: "100%",
+            display: "block",
+            position: "relative",
+            zIndex: 1
+          }}
+        />
+      </div>
       
-      {/* Fallback UI - only show if ChatKit has never been initialized and not loading */}
-      {!showChatKit && !isInitializingSession && scriptStatus === "ready" && !blockingError && (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="text-center">
-            <div className="mb-4 text-6xl">🤖</div>
-            <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
-              AI Buddy is Ready!
-            </h2>
-            <p className="mb-4 text-gray-600 dark:text-gray-300">
-              The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              DEBUG: Fallback UI | hasControl: {String(Boolean(chatkit.control))} | initialized: {String(hasInitializedRef.current)}
-            </p>
-            <button
-              onClick={handleResetChat}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-            >
-              Restart Chat
-            </button>
-          </div>
+      {/* Show loading/fallback states OVER the ChatKit container */}
+      {!showChatKit && (
+        <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-white dark:bg-slate-900" style={{ zIndex: 2 }}>
+          {isInitializingSession && !blockingError ? (
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-600 dark:text-gray-300">Initializing chat session...</p>
+              <p className="text-xs text-gray-400 mt-2">DEBUG: Loading state active</p>
+            </div>
+          ) : scriptStatus === "ready" && !blockingError ? (
+            <div className="text-center">
+              <div className="mb-4 text-6xl">🤖</div>
+              <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
+                AI Buddy is Ready!
+              </h2>
+              <p className="mb-4 text-gray-600 dark:text-gray-300">
+                The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                DEBUG: Fallback UI | hasControl: {String(Boolean(chatkit.control))} | initialized: {String(hasInitializedRef.current)}
+              </p>
+              <button
+                onClick={handleResetChat}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+              >
+                Restart Chat
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
       
