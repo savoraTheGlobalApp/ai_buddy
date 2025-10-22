@@ -1,8 +1,11 @@
 [build]
   command = "npm run build"
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "18"
+  # Ensure proper Next.js build behavior
+  NEXT_TELEMETRY_DISABLED = "1"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
@@ -10,8 +13,17 @@
 # Netlify Functions configuration
 [functions]
   directory = ".netlify/functions"
+  node_bundler = "esbuild"
 
 # Security: Configure secrets scanning to ignore NEXT_PUBLIC_ variables
 # These are intentionally exposed to the client-side and are not secrets
 [build.processing]
   skip_processing = false
+
+# Ensure proper handling of external scripts and resources
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
