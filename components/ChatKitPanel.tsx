@@ -392,8 +392,8 @@ export function ChatKitPanel({
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      {/* Show ChatKit if it has control OR if it has been initialized before */}
-      {(chatkit.control || hasInitialized) && (
+      {/* Always show ChatKit once it has been initialized - don't unmount it */}
+      {hasInitialized && (
         <ChatKit
           key={widgetInstanceKey}
           control={chatkit.control}
@@ -407,8 +407,18 @@ export function ChatKitPanel({
         />
       )}
       
-      {/* Fallback UI - only show if ChatKit has never been initialized */}
-      {!hasInitialized && !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError && (
+      {/* Show loading state while initializing */}
+      {!hasInitialized && isInitializingSession && !blockingError && (
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-300">Initializing chat session...</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Fallback UI - only show if ChatKit has never been initialized and not loading */}
+      {!hasInitialized && !isInitializingSession && scriptStatus === "ready" && !blockingError && (
         <div className="flex h-full w-full items-center justify-center">
           <div className="text-center">
             <div className="mb-4 text-6xl">🤖</div>
@@ -430,11 +440,7 @@ export function ChatKitPanel({
       
       <ErrorOverlay
         error={blockingError}
-        fallbackMessage={
-          blockingError || !isInitializingSession
-            ? null
-            : "Loading assistant session..."
-        }
+        fallbackMessage={null}
         onRetry={blockingError && errors.retryable ? handleResetChat : null}
         retryLabel="Restart chat"
       />
