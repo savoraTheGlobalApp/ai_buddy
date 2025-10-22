@@ -61,7 +61,6 @@ export function ChatKitPanel({
     console.log("[ChatKitPanel] Initial script status check:", { isReady, customElements: !!window.customElements });
     return isReady ? "ready" : "pending";
   });
-  const [widgetInstanceKey, setWidgetInstanceKey] = useState(0);
 
   const setErrorState = useCallback((updates: Partial<ErrorState>) => {
     setErrors((current) => ({ ...current, ...updates }));
@@ -150,17 +149,12 @@ export function ChatKitPanel({
   }, [isWorkflowConfigured, setErrorState]);
 
   const handleResetChat = useCallback(() => {
-    processedFacts.current.clear();
-    hasInitializedRef.current = false;
-    setShowChatKit(false);
-    if (isBrowser) {
-      setScriptStatus(
-        window.customElements?.get("openai-chatkit") ? "ready" : "pending"
-      );
+    console.log("[ChatKitPanel] 🔄 RESET CHAT called - reloading page");
+    // Instead of trying to reset state, just reload the page
+    // This is cleaner and avoids re-render issues
+    if (typeof window !== "undefined") {
+      window.location.reload();
     }
-    setIsInitializingSession(true);
-    setErrors(createInitialErrors());
-    setWidgetInstanceKey((prev) => prev + 1);
   }, []);
 
   const getClientSecret = useCallback(
@@ -351,7 +345,6 @@ export function ChatKitPanel({
     hasError: Boolean(blockingError),
     workflowId: WORKFLOW_ID,
     blockingError,
-    widgetInstanceKey,
     willShowChatKit: Boolean(chatkit.control),
     willShowFallback: !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
   });
@@ -395,10 +388,9 @@ export function ChatKitPanel({
       hasControl: Boolean(chatkit.control),
       isInitializingSession,
       scriptStatus,
-      blockingError,
-      widgetInstanceKey
+      blockingError
     });
-  }, [showChatKit, chatkit.control, isInitializingSession, scriptStatus, blockingError, widgetInstanceKey]);
+  }, [showChatKit, chatkit.control, isInitializingSession, scriptStatus, blockingError]);
   
   useEffect(() => {
     console.log("[ChatKitPanel] 🎯 chatkit.control changed:", {
@@ -436,15 +428,13 @@ export function ChatKitPanel({
             DEBUG: ChatKit Mounted | control: {chatkit.control ? 'YES' : 'NO'}
           </div>
           <ChatKit
-            key={widgetInstanceKey}
             control={chatkit.control}
             style={{
               minHeight: "400px",
               width: "100%",
               display: "block",
               position: "relative",
-              zIndex: 1,
-              visibility: chatkit.control ? "visible" : "hidden"
+              zIndex: 1
             }}
           />
         </>
