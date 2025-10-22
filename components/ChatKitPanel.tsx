@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   STARTER_PROMPTS,
@@ -43,12 +43,12 @@ const createInitialErrors = (): ErrorState => ({
   retryable: false,
 });
 
-export function ChatKitPanel({
+const ChatKitPanelComponent = ({
   theme,
   onWidgetAction,
   onResponseEnd,
   onThemeRequest,
-}: ChatKitPanelProps) {
+}: ChatKitPanelProps) => {
   const processedFacts = useRef(new Set<string>());
   const [errors, setErrors] = useState<ErrorState>(() => createInitialErrors());
   const [isInitializingSession, setIsInitializingSession] = useState(true);
@@ -477,7 +477,10 @@ export function ChatKitPanel({
       />
     </div>
   );
-}
+};
+
+// Wrap with memo to prevent unnecessary re-renders from parent
+export const ChatKitPanel = memo(ChatKitPanelComponent);
 
 function extractErrorDetail(
   payload: Record<string, unknown> | undefined,

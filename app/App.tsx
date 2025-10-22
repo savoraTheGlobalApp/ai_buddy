@@ -94,7 +94,7 @@ export default function App() {
         timestamp: new Date().toISOString(),
       });
     }
-  }, [accessCode]);
+  }, []); // Remove accessCode dependency to prevent re-renders
 
   const handleResponseEnd = useCallback(() => {
     if (process.env.NODE_ENV !== "production") {
@@ -103,10 +103,9 @@ export default function App() {
     
     // Log conversation completion for analytics
     console.info("[Usage] conversation completed", {
-      accessCode,
       timestamp: new Date().toISOString(),
     });
-  }, [accessCode]);
+  }, []); // Remove accessCode dependency to prevent re-renders
 
   // Show loading screen while checking access
   if (isCheckingAccess) {
