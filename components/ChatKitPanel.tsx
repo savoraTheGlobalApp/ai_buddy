@@ -274,74 +274,81 @@ const ChatKitPanelComponent = ({
     onResponseEndRef.current = onResponseEnd;
   }, [onThemeRequest, onWidgetAction, onResponseEnd]);
 
-  // Memoize the ChatKit configuration with MINIMAL dependencies
-  const chatkitConfig = useMemo(() => ({
-    api: { getClientSecret },
-    theme: {
-      colorScheme: theme,
-      ...getThemeConfig(theme),
-    },
-    startScreen: {
-      greeting: GREETING,
-      prompts: STARTER_PROMPTS,
-    },
-    composer: {
-      placeholder: PLACEHOLDER_INPUT,
-      attachments: {
-        enabled: true,
+  // CRITICAL: Store the config in a ref so it's created ONCE and NEVER changes
+  // This prevents useChatKit from reinitializing
+  const chatkitConfigRef = useRef<any>(null);
+  
+  if (!chatkitConfigRef.current) {
+    console.log("[ChatKitPanel] 🎯 Creating ChatKit config ONCE - will never change");
+    chatkitConfigRef.current = {
+      api: { getClientSecret },
+      theme: {
+        colorScheme: theme,
+        ...getThemeConfig(theme),
       },
-    },
-    threadItemActions: {
-      feedback: false,
-    },
-    onClientTool: async (invocation: {
-      name: string;
-      params: Record<string, unknown>;
-    }) => {
-      if (invocation.name === "switch_theme") {
-        const requested = invocation.params.theme;
-        if (requested === "light" || requested === "dark") {
-          if (isDev) {
-            console.debug("[ChatKitPanel] switch_theme", requested);
+      startScreen: {
+        greeting: GREETING,
+        prompts: STARTER_PROMPTS,
+      },
+      composer: {
+        placeholder: PLACEHOLDER_INPUT,
+        attachments: {
+          enabled: true,
+        },
+      },
+      threadItemActions: {
+        feedback: false,
+      },
+      onClientTool: async (invocation: {
+        name: string;
+        params: Record<string, unknown>;
+      }) => {
+        if (invocation.name === "switch_theme") {
+          const requested = invocation.params.theme;
+          if (requested === "light" || requested === "dark") {
+            if (isDev) {
+              console.debug("[ChatKitPanel] switch_theme", requested);
+            }
+            onThemeRequestRef.current(requested);
+            return { success: true };
           }
-          onThemeRequestRef.current(requested);
+          return { success: false };
+        }
+
+        if (invocation.name === "record_fact") {
+          const id = String(invocation.params.fact_id ?? "");
+          const text = String(invocation.params.fact_text ?? "");
+          if (!id || processedFacts.current.has(id)) {
+            return { success: true };
+          }
+          processedFacts.current.add(id);
+          void onWidgetActionRef.current({
+            type: "save",
+            factId: id,
+            factText: text.replace(/\s+/g, " ").trim(),
+          });
           return { success: true };
         }
+
         return { success: false };
-      }
+      },
+      onResponseEnd: () => {
+        onResponseEndRef.current();
+      },
+      onResponseStart: () => {
+        setErrorState({ integration: null, retryable: false });
+      },
+      onThreadChange: () => {
+        processedFacts.current.clear();
+      },
+      onError: ({ error }: { error: unknown }) => {
+        console.error("ChatKit error", error);
+      },
+    };
+  }
 
-      if (invocation.name === "record_fact") {
-        const id = String(invocation.params.fact_id ?? "");
-        const text = String(invocation.params.fact_text ?? "");
-        if (!id || processedFacts.current.has(id)) {
-          return { success: true };
-        }
-        processedFacts.current.add(id);
-        void onWidgetActionRef.current({
-          type: "save",
-          factId: id,
-          factText: text.replace(/\s+/g, " ").trim(),
-        });
-        return { success: true };
-      }
-
-      return { success: false };
-    },
-    onResponseEnd: () => {
-      onResponseEndRef.current();
-    },
-    onResponseStart: () => {
-      setErrorState({ integration: null, retryable: false });
-    },
-    onThreadChange: () => {
-      processedFacts.current.clear();
-    },
-    onError: ({ error }: { error: unknown }) => {
-      console.error("ChatKit error", error);
-    },
-  }), [getClientSecret, theme, setErrorState]); // Only theme and getClientSecret as dependencies
-
-  const chatkit = useChatKit(chatkitConfig);
+  // Always use the SAME config object from ref
+  const chatkit = useChatKit(chatkitConfigRef.current);
 
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
