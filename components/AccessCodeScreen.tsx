@@ -32,7 +32,19 @@ export function AccessCodeScreen({ onAccessGranted }: AccessCodeScreenProps) {
       });
 
       console.log("Response status:", response.status);
-      const data = await response.json();
+      console.log("Response ok:", response.ok);
+      
+      let data;
+      try {
+        const text = await response.text();
+        console.log("Response text:", text);
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error("Failed to parse response:", parseError);
+        setError("Invalid response from server. Please check configuration.");
+        return;
+      }
+      
       console.log("Response data:", data);
 
       if (response.ok && data.valid) {
@@ -47,7 +59,7 @@ export function AccessCodeScreen({ onAccessGranted }: AccessCodeScreenProps) {
       }
     } catch (err) {
       console.error("Validation error:", err);
-      setError("Failed to validate access code. Please try again.");
+      setError(`Failed to validate access code: ${err instanceof Error ? err.message : 'Please try again.'}`);
     } finally {
       setIsLoading(false);
     }
