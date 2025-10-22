@@ -387,30 +387,71 @@ export function ChatKitPanel({
   const hasInitializedRef = useRef(false);
   const [showChatKit, setShowChatKit] = useState(false);
   
+  // Debug: Track all state changes
   useEffect(() => {
+    console.log("[ChatKitPanel] 🔍 State Debug:", {
+      showChatKit,
+      hasInitializedRef: hasInitializedRef.current,
+      hasControl: Boolean(chatkit.control),
+      isInitializingSession,
+      scriptStatus,
+      blockingError,
+      widgetInstanceKey
+    });
+  }, [showChatKit, chatkit.control, isInitializingSession, scriptStatus, blockingError, widgetInstanceKey]);
+  
+  useEffect(() => {
+    console.log("[ChatKitPanel] 🎯 chatkit.control changed:", {
+      hasControl: Boolean(chatkit.control),
+      hasInitializedRef: hasInitializedRef.current,
+      showChatKit,
+      willInitialize: Boolean(chatkit.control && !hasInitializedRef.current)
+    });
+    
     if (chatkit.control && !hasInitializedRef.current) {
-      console.log("[ChatKitPanel] ChatKit successfully initialized - will stay mounted");
+      console.log("[ChatKitPanel] ✅ ChatKit successfully initialized - will stay mounted");
       hasInitializedRef.current = true;
       setShowChatKit(true);
+      console.log("[ChatKitPanel] ✅ setShowChatKit(true) called");
+    } else if (!chatkit.control && hasInitializedRef.current) {
+      console.warn("[ChatKitPanel] ⚠️ chatkit.control became null/undefined but we'll keep showing ChatKit");
     }
-  }, [chatkit.control]);
+  }, [chatkit.control, showChatKit]);
+
+  console.log("[ChatKitPanel] 🎨 RENDER:", {
+    showChatKit,
+    hasInitializedRef: hasInitializedRef.current,
+    hasControl: Boolean(chatkit.control),
+    willRenderChatKit: showChatKit,
+    willRenderLoading: !showChatKit && isInitializingSession && !blockingError,
+    willRenderFallback: !showChatKit && !isInitializingSession && scriptStatus === "ready" && !blockingError
+  });
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
       {/* Always show ChatKit once it has been initialized - never unmount */}
-      {showChatKit && (
-        <ChatKit
-          key={widgetInstanceKey}
-          control={chatkit.control}
-          style={{
-            minHeight: "400px",
-            width: "100%",
-            display: "block",
-            position: "relative",
-            zIndex: 1,
-            visibility: chatkit.control ? "visible" : "hidden"
-          }}
-        />
+      {showChatKit ? (
+        <>
+          <div style={{ position: 'absolute', top: 0, left: 0, padding: '5px', background: 'rgba(0,255,0,0.3)', zIndex: 9999, fontSize: '10px' }}>
+            DEBUG: ChatKit Mounted | control: {chatkit.control ? 'YES' : 'NO'}
+          </div>
+          <ChatKit
+            key={widgetInstanceKey}
+            control={chatkit.control}
+            style={{
+              minHeight: "400px",
+              width: "100%",
+              display: "block",
+              position: "relative",
+              zIndex: 1,
+              visibility: chatkit.control ? "visible" : "hidden"
+            }}
+          />
+        </>
+      ) : (
+        <div style={{ position: 'absolute', top: 0, left: 0, padding: '5px', background: 'rgba(255,0,0,0.3)', zIndex: 9999, fontSize: '10px' }}>
+          DEBUG: ChatKit NOT Mounted | showChatKit: {String(showChatKit)}
+        </div>
       )}
       
       {/* Show loading state while initializing */}
@@ -419,6 +460,7 @@ export function ChatKitPanel({
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-gray-600 dark:text-gray-300">Initializing chat session...</p>
+            <p className="text-xs text-gray-400 mt-2">DEBUG: Loading state active</p>
           </div>
         </div>
       )}
@@ -433,6 +475,9 @@ export function ChatKitPanel({
             </h2>
             <p className="mb-4 text-gray-600 dark:text-gray-300">
               The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
+            </p>
+            <p className="text-xs text-gray-400 mb-4">
+              DEBUG: Fallback UI | hasControl: {String(Boolean(chatkit.control))} | initialized: {String(hasInitializedRef.current)}
             </p>
             <button
               onClick={handleResetChat}
