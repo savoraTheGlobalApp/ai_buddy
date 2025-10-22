@@ -263,7 +263,18 @@ export function ChatKitPanel({
     [isWorkflowConfigured, setErrorState]
   );
 
-  // Memoize the ChatKit configuration to prevent re-initialization
+  // Store callbacks in refs to prevent config recreation
+  const onThemeRequestRef = useRef(onThemeRequest);
+  const onWidgetActionRef = useRef(onWidgetAction);
+  const onResponseEndRef = useRef(onResponseEnd);
+  
+  useEffect(() => {
+    onThemeRequestRef.current = onThemeRequest;
+    onWidgetActionRef.current = onWidgetAction;
+    onResponseEndRef.current = onResponseEnd;
+  }, [onThemeRequest, onWidgetAction, onResponseEnd]);
+
+  // Memoize the ChatKit configuration with MINIMAL dependencies
   const chatkitConfig = useMemo(() => ({
     api: { getClientSecret },
     theme: {
@@ -277,7 +288,6 @@ export function ChatKitPanel({
     composer: {
       placeholder: PLACEHOLDER_INPUT,
       attachments: {
-        // Enable attachments
         enabled: true,
       },
     },
@@ -294,7 +304,7 @@ export function ChatKitPanel({
           if (isDev) {
             console.debug("[ChatKitPanel] switch_theme", requested);
           }
-          onThemeRequest(requested);
+          onThemeRequestRef.current(requested);
           return { success: true };
         }
         return { success: false };
@@ -307,7 +317,7 @@ export function ChatKitPanel({
           return { success: true };
         }
         processedFacts.current.add(id);
-        void onWidgetAction({
+        void onWidgetActionRef.current({
           type: "save",
           factId: id,
           factText: text.replace(/\s+/g, " ").trim(),
@@ -318,7 +328,7 @@ export function ChatKitPanel({
       return { success: false };
     },
     onResponseEnd: () => {
-      onResponseEnd();
+      onResponseEndRef.current();
     },
     onResponseStart: () => {
       setErrorState({ integration: null, retryable: false });
@@ -327,11 +337,9 @@ export function ChatKitPanel({
       processedFacts.current.clear();
     },
     onError: ({ error }: { error: unknown }) => {
-      // Note that Chatkit UI handles errors for your users.
-      // Thus, your app code doesn't need to display errors on UI.
       console.error("ChatKit error", error);
     },
-  }), [getClientSecret, theme, onThemeRequest, onWidgetAction, onResponseEnd, setErrorState]);
+  }), [getClientSecret, theme, setErrorState]); // Only theme and getClientSecret as dependencies
 
   const chatkit = useChatKit(chatkitConfig);
 
@@ -380,44 +388,26 @@ export function ChatKitPanel({
   const hasInitializedRef = useRef(false);
   const [showChatKit, setShowChatKit] = useState(false);
   
-  // Debug: Track all state changes
+  // Simplified initialization - only run once when control is first available
   useEffect(() => {
-    console.log("[ChatKitPanel] 🔍 State Debug:", {
-      showChatKit,
-      hasInitializedRef: hasInitializedRef.current,
-      hasControl: Boolean(chatkit.control),
-      isInitializingSession,
-      scriptStatus,
-      blockingError
-    });
-  }, [showChatKit, chatkit.control, isInitializingSession, scriptStatus, blockingError]);
-  
-  useEffect(() => {
-    console.log("[ChatKitPanel] 🎯 chatkit.control changed:", {
-      hasControl: Boolean(chatkit.control),
-      hasInitializedRef: hasInitializedRef.current,
-      showChatKit,
-      willInitialize: Boolean(chatkit.control && !hasInitializedRef.current)
-    });
-    
     if (chatkit.control && !hasInitializedRef.current) {
-      console.log("[ChatKitPanel] ✅ ChatKit successfully initialized - will stay mounted");
+      console.log("[ChatKitPanel] ✅ ChatKit successfully initialized - will stay mounted forever");
       hasInitializedRef.current = true;
       setShowChatKit(true);
-      console.log("[ChatKitPanel] ✅ setShowChatKit(true) called");
-    } else if (!chatkit.control && hasInitializedRef.current) {
-      console.warn("[ChatKitPanel] ⚠️ chatkit.control became null/undefined but we'll keep showing ChatKit");
     }
-  }, [chatkit.control, showChatKit]);
+  }, [chatkit.control]);
 
-  console.log("[ChatKitPanel] 🎨 RENDER:", {
-    showChatKit,
-    hasInitializedRef: hasInitializedRef.current,
-    hasControl: Boolean(chatkit.control),
-    willRenderChatKit: showChatKit,
-    willRenderLoading: !showChatKit && isInitializingSession && !blockingError,
-    willRenderFallback: !showChatKit && !isInitializingSession && scriptStatus === "ready" && !blockingError
-  });
+  // Only log on significant state changes
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  
+  if (renderCountRef.current % 5 === 0 || showChatKit) {
+    console.log("[ChatKitPanel] 🎨 RENDER #" + renderCountRef.current + ":", {
+      showChatKit,
+      hasControl: Boolean(chatkit.control),
+      isInitializingSession
+    });
+  }
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
