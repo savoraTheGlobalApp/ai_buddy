@@ -15,3 +15,8 @@
 # These are intentionally exposed to the client-side and are not secrets
 [build.processing]
   skip_processing = false
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
