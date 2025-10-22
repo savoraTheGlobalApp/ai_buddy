@@ -40,7 +40,19 @@ export default function App() {
         body: JSON.stringify({ accessCode: code }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error("Failed to parse response:", parseError, "Response text:", text);
+        // Clear invalid stored access
+        localStorage.removeItem("ai_buddy_access_granted");
+        localStorage.removeItem("ai_buddy_access_code");
+        setHasAccess(false);
+        return;
+      }
 
       if (response.ok && data.valid) {
         setAccessCode(code);

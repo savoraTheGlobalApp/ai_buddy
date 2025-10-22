@@ -1,22 +1,27 @@
-[build]
-  command = "npm run build"
+# This file is kept for reference only - project now deploys on Vercel
+# Netlify configuration (deprecated - use Vercel instead)
 
-[build.environment]
-  NODE_VERSION = "18"
+# [build]
+#   command = "npm run build"
+#   publish = ".next"
 
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+# [build.environment]
+#   NODE_VERSION = "18"
+#   NEXT_TELEMETRY_DISABLED = "1"
 
-# Netlify Functions configuration
-[functions]
-  directory = ".netlify/functions"
+# [[plugins]]
+#   package = "@netlify/plugin-nextjs"
 
-# Security: Configure secrets scanning to ignore NEXT_PUBLIC_ variables
-# These are intentionally exposed to the client-side and are not secrets
-[build.processing]
-  skip_processing = false
+# [functions]
+#   directory = ".netlify/functions"
+#   node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# [build.processing]
+#   skip_processing = false
+
+# [[headers]]
+#   for = "/*"
+#   [headers.values]
+#     X-Frame-Options = "SAMEORIGIN"
+#     X-Content-Type-Options = "nosniff"
+#     Referrer-Policy = "strict-origin-when-cross-origin"
