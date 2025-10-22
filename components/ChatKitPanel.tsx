@@ -151,6 +151,8 @@ export function ChatKitPanel({
 
   const handleResetChat = useCallback(() => {
     processedFacts.current.clear();
+    hasInitializedRef.current = false;
+    setShowChatKit(false);
     if (isBrowser) {
       setScriptStatus(
         window.customElements?.get("openai-chatkit") ? "ready" : "pending"
@@ -380,20 +382,23 @@ export function ChatKitPanel({
   // Remove the force re-render that's causing the infinite loop
   // The ChatKit component should render naturally when control is available
 
-  // Track if ChatKit has ever been successfully initialized
-  const [hasInitialized, setHasInitialized] = useState(false);
+  // Track if ChatKit has ever been successfully initialized using a ref
+  // This ensures it never gets reset during re-renders
+  const hasInitializedRef = useRef(false);
+  const [showChatKit, setShowChatKit] = useState(false);
   
   useEffect(() => {
-    if (chatkit.control && !hasInitialized) {
-      console.log("[ChatKitPanel] ChatKit successfully initialized");
-      setHasInitialized(true);
+    if (chatkit.control && !hasInitializedRef.current) {
+      console.log("[ChatKitPanel] ChatKit successfully initialized - will stay mounted");
+      hasInitializedRef.current = true;
+      setShowChatKit(true);
     }
-  }, [chatkit.control, hasInitialized]);
+  }, [chatkit.control]);
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      {/* Always show ChatKit once it has been initialized - don't unmount it */}
-      {hasInitialized && (
+      {/* Always show ChatKit once it has been initialized - never unmount */}
+      {showChatKit && (
         <ChatKit
           key={widgetInstanceKey}
           control={chatkit.control}
@@ -402,13 +407,14 @@ export function ChatKitPanel({
             width: "100%",
             display: "block",
             position: "relative",
-            zIndex: 1
+            zIndex: 1,
+            visibility: chatkit.control ? "visible" : "hidden"
           }}
         />
       )}
       
       {/* Show loading state while initializing */}
-      {!hasInitialized && isInitializingSession && !blockingError && (
+      {!showChatKit && isInitializingSession && !blockingError && (
         <div className="flex h-full w-full items-center justify-center">
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -418,7 +424,7 @@ export function ChatKitPanel({
       )}
       
       {/* Fallback UI - only show if ChatKit has never been initialized and not loading */}
-      {!hasInitialized && !isInitializingSession && scriptStatus === "ready" && !blockingError && (
+      {!showChatKit && !isInitializingSession && scriptStatus === "ready" && !blockingError && (
         <div className="flex h-full w-full items-center justify-center">
           <div className="text-center">
             <div className="mb-4 text-6xl">🤖</div>
