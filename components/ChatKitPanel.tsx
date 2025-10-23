@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   STARTER_PROMPTS,
@@ -43,12 +43,12 @@ const createInitialErrors = (): ErrorState => ({
   retryable: false,
 });
 
-export function ChatKitPanel({
+const ChatKitPanelComponent = ({
   theme,
   onWidgetAction,
   onResponseEnd,
   onThemeRequest,
-}: ChatKitPanelProps) {
+}: ChatKitPanelProps) => {
   const processedFacts = useRef(new Set<string>());
   const [errors, setErrors] = useState<ErrorState>(() => createInitialErrors());
   const [isInitializingSession, setIsInitializingSession] = useState(true);
@@ -61,7 +61,6 @@ export function ChatKitPanel({
     console.log("[ChatKitPanel] Initial script status check:", { isReady, customElements: !!window.customElements });
     return isReady ? "ready" : "pending";
   });
-  const [widgetInstanceKey, setWidgetInstanceKey] = useState(0);
 
   const setErrorState = useCallback((updates: Partial<ErrorState>) => {
     setErrors((current) => ({ ...current, ...updates }));
@@ -150,15 +149,12 @@ export function ChatKitPanel({
   }, [isWorkflowConfigured, setErrorState]);
 
   const handleResetChat = useCallback(() => {
-    processedFacts.current.clear();
-    if (isBrowser) {
-      setScriptStatus(
-        window.customElements?.get("openai-chatkit") ? "ready" : "pending"
-      );
+    console.log("[ChatKitPanel] 🔄 RESET CHAT called - reloading page");
+    // Instead of trying to reset state, just reload the page
+    // This is cleaner and avoids re-render issues
+    if (typeof window !== "undefined") {
+      window.location.reload();
     }
-    setIsInitializingSession(true);
-    setErrors(createInitialErrors());
-    setWidgetInstanceKey((prev) => prev + 1);
   }, []);
 
   const getClientSecret = useCallback(
@@ -267,77 +263,93 @@ export function ChatKitPanel({
     [isWorkflowConfigured, setErrorState]
   );
 
-  // Memoize the ChatKit configuration to prevent re-initialization
-  const chatkitConfig = useMemo(() => ({
-    api: { getClientSecret },
-    theme: {
-      colorScheme: theme,
-      ...getThemeConfig(theme),
-    },
-    startScreen: {
-      greeting: GREETING,
-      prompts: STARTER_PROMPTS,
-    },
-    composer: {
-      placeholder: PLACEHOLDER_INPUT,
-      attachments: {
-        // Enable attachments
-        enabled: true,
+  // Store callbacks in refs to prevent config recreation
+  const onThemeRequestRef = useRef(onThemeRequest);
+  const onWidgetActionRef = useRef(onWidgetAction);
+  const onResponseEndRef = useRef(onResponseEnd);
+  
+  useEffect(() => {
+    onThemeRequestRef.current = onThemeRequest;
+    onWidgetActionRef.current = onWidgetAction;
+    onResponseEndRef.current = onResponseEnd;
+  }, [onThemeRequest, onWidgetAction, onResponseEnd]);
+
+  // CRITICAL: Store the config in a ref so it's created ONCE and NEVER changes
+  // This prevents useChatKit from reinitializing
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chatkitConfigRef = useRef<any>(null);
+  
+  if (!chatkitConfigRef.current) {
+    console.log("[ChatKitPanel] 🎯 Creating ChatKit config ONCE - will never change");
+    chatkitConfigRef.current = {
+      api: { getClientSecret },
+      theme: {
+        colorScheme: theme,
+        ...getThemeConfig(theme),
       },
-    },
-    threadItemActions: {
-      feedback: false,
-    },
-    onClientTool: async (invocation: {
-      name: string;
-      params: Record<string, unknown>;
-    }) => {
-      if (invocation.name === "switch_theme") {
-        const requested = invocation.params.theme;
-        if (requested === "light" || requested === "dark") {
-          if (isDev) {
-            console.debug("[ChatKitPanel] switch_theme", requested);
+      startScreen: {
+        greeting: GREETING,
+        prompts: STARTER_PROMPTS,
+      },
+      composer: {
+        placeholder: PLACEHOLDER_INPUT,
+        attachments: {
+          enabled: true,
+        },
+      },
+      threadItemActions: {
+        feedback: false,
+      },
+      onClientTool: async (invocation: {
+        name: string;
+        params: Record<string, unknown>;
+      }) => {
+        if (invocation.name === "switch_theme") {
+          const requested = invocation.params.theme;
+          if (requested === "light" || requested === "dark") {
+            if (isDev) {
+              console.debug("[ChatKitPanel] switch_theme", requested);
+            }
+            onThemeRequestRef.current(requested);
+            return { success: true };
           }
-          onThemeRequest(requested);
+          return { success: false };
+        }
+
+        if (invocation.name === "record_fact") {
+          const id = String(invocation.params.fact_id ?? "");
+          const text = String(invocation.params.fact_text ?? "");
+          if (!id || processedFacts.current.has(id)) {
+            return { success: true };
+          }
+          processedFacts.current.add(id);
+          void onWidgetActionRef.current({
+            type: "save",
+            factId: id,
+            factText: text.replace(/\s+/g, " ").trim(),
+          });
           return { success: true };
         }
+
         return { success: false };
-      }
+      },
+      onResponseEnd: () => {
+        onResponseEndRef.current();
+      },
+      onResponseStart: () => {
+        setErrorState({ integration: null, retryable: false });
+      },
+      onThreadChange: () => {
+        processedFacts.current.clear();
+      },
+      onError: ({ error }: { error: unknown }) => {
+        console.error("ChatKit error", error);
+      },
+    };
+  }
 
-      if (invocation.name === "record_fact") {
-        const id = String(invocation.params.fact_id ?? "");
-        const text = String(invocation.params.fact_text ?? "");
-        if (!id || processedFacts.current.has(id)) {
-          return { success: true };
-        }
-        processedFacts.current.add(id);
-        void onWidgetAction({
-          type: "save",
-          factId: id,
-          factText: text.replace(/\s+/g, " ").trim(),
-        });
-        return { success: true };
-      }
-
-      return { success: false };
-    },
-    onResponseEnd: () => {
-      onResponseEnd();
-    },
-    onResponseStart: () => {
-      setErrorState({ integration: null, retryable: false });
-    },
-    onThreadChange: () => {
-      processedFacts.current.clear();
-    },
-    onError: ({ error }: { error: unknown }) => {
-      // Note that Chatkit UI handles errors for your users.
-      // Thus, your app code doesn't need to display errors on UI.
-      console.error("ChatKit error", error);
-    },
-  }), [getClientSecret, theme, onThemeRequest, onWidgetAction, onResponseEnd, setErrorState]);
-
-  const chatkit = useChatKit(chatkitConfig);
+  // Always use the SAME config object from ref
+  const chatkit = useChatKit(chatkitConfigRef.current);
 
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
@@ -349,7 +361,6 @@ export function ChatKitPanel({
     hasError: Boolean(blockingError),
     workflowId: WORKFLOW_ID,
     blockingError,
-    widgetInstanceKey,
     willShowChatKit: Boolean(chatkit.control),
     willShowFallback: !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
   });
@@ -380,22 +391,46 @@ export function ChatKitPanel({
   // Remove the force re-render that's causing the infinite loop
   // The ChatKit component should render naturally when control is available
 
-  // Track if ChatKit has ever been successfully initialized
-  const [hasInitialized, setHasInitialized] = useState(false);
+  // Track if ChatKit has ever been successfully initialized using a ref
+  // This ensures it never gets reset during re-renders
+  const hasInitializedRef = useRef(false);
+  const [showChatKit, setShowChatKit] = useState(false);
   
+  // Simplified initialization - only run once when control is first available
   useEffect(() => {
-    if (chatkit.control && !hasInitialized) {
-      console.log("[ChatKitPanel] ChatKit successfully initialized");
-      setHasInitialized(true);
+    if (chatkit.control && !hasInitializedRef.current) {
+      console.log("[ChatKitPanel] ✅ ChatKit successfully initialized - will stay mounted forever");
+      hasInitializedRef.current = true;
+      setShowChatKit(true);
     }
-  }, [chatkit.control, hasInitialized]);
+  }, [chatkit.control]);
+
+  // Debug every render to see what's changing
+  const renderCountRef = useRef(0);
+  const prevPropsRef = useRef({ theme, onWidgetAction, onResponseEnd, onThemeRequest });
+  renderCountRef.current += 1;
+  
+  console.log("[ChatKitPanel] 🎨 RENDER #" + renderCountRef.current + ":", {
+    showChatKit,
+    hasControl: Boolean(chatkit.control),
+    themeChanged: prevPropsRef.current.theme !== theme,
+    onWidgetActionChanged: prevPropsRef.current.onWidgetAction !== onWidgetAction,
+    onResponseEndChanged: prevPropsRef.current.onResponseEnd !== onResponseEnd,
+    onThemeRequestChanged: prevPropsRef.current.onThemeRequest !== onThemeRequest,
+  });
+  
+  prevPropsRef.current = { theme, onWidgetAction, onResponseEnd, onThemeRequest };
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      {/* Show ChatKit if it has control OR if it has been initialized before */}
-      {(chatkit.control || hasInitialized) && (
+      {/* Debug indicator */}
+      <div style={{ position: 'absolute', top: 0, left: 0, padding: '5px', background: showChatKit ? 'rgba(0,255,0,0.3)' : 'rgba(255,0,0,0.3)', zIndex: 9999, fontSize: '10px' }}>
+        DEBUG: ChatKit {showChatKit ? 'Mounted' : 'NOT Mounted'} | control: {chatkit.control ? 'YES' : 'NO'}
+      </div>
+      
+      {/* ALWAYS render ChatKit once initialized, use CSS to hide loading states */}
+      <div style={{ display: showChatKit ? 'block' : 'none', width: '100%', height: '100%' }}>
         <ChatKit
-          key={widgetInstanceKey}
           control={chatkit.control}
           style={{
             minHeight: "400px",
@@ -405,42 +440,52 @@ export function ChatKitPanel({
             zIndex: 1
           }}
         />
-      )}
+      </div>
       
-      {/* Fallback UI - only show if ChatKit has never been initialized */}
-      {!hasInitialized && !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError && (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="text-center">
-            <div className="mb-4 text-6xl">🤖</div>
-            <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
-              AI Buddy is Ready!
-            </h2>
-            <p className="mb-4 text-gray-600 dark:text-gray-300">
-              The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
-            </p>
-            <button
-              onClick={handleResetChat}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-            >
-              Restart Chat
-            </button>
-          </div>
+      {/* Show loading/fallback states OVER the ChatKit container */}
+      {!showChatKit && (
+        <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-white dark:bg-slate-900" style={{ zIndex: 2 }}>
+          {isInitializingSession && !blockingError ? (
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-600 dark:text-gray-300">Initializing chat session...</p>
+              <p className="text-xs text-gray-400 mt-2">DEBUG: Loading state active</p>
+            </div>
+          ) : scriptStatus === "ready" && !blockingError ? (
+            <div className="text-center">
+              <div className="mb-4 text-6xl">🤖</div>
+              <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
+                AI Buddy is Ready!
+              </h2>
+              <p className="mb-4 text-gray-600 dark:text-gray-300">
+                The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                DEBUG: Fallback UI | hasControl: {String(Boolean(chatkit.control))} | initialized: {String(hasInitializedRef.current)}
+              </p>
+              <button
+                onClick={handleResetChat}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+              >
+                Restart Chat
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
       
       <ErrorOverlay
         error={blockingError}
-        fallbackMessage={
-          blockingError || !isInitializingSession
-            ? null
-            : "Loading assistant session..."
-        }
+        fallbackMessage={null}
         onRetry={blockingError && errors.retryable ? handleResetChat : null}
         retryLabel="Restart chat"
       />
     </div>
   );
-}
+};
+
+// Wrap with memo to prevent unnecessary re-renders from parent
+export const ChatKitPanel = memo(ChatKitPanelComponent);
 
 function extractErrorDetail(
   payload: Record<string, unknown> | undefined,

@@ -94,7 +94,8 @@ export default function App() {
         timestamp: new Date().toISOString(),
       });
     }
-  }, [accessCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty - accessCode accessed via closure to prevent re-renders
 
   const handleResponseEnd = useCallback(() => {
     if (process.env.NODE_ENV !== "production") {
@@ -103,10 +104,9 @@ export default function App() {
     
     // Log conversation completion for analytics
     console.info("[Usage] conversation completed", {
-      accessCode,
       timestamp: new Date().toISOString(),
     });
-  }, [accessCode]);
+  }, []); // Intentionally empty to prevent re-renders
 
   // Show loading screen while checking access
   if (isCheckingAccess) {
