@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   STARTER_PROMPTS,
@@ -276,6 +276,7 @@ const ChatKitPanelComponent = ({
 
   // CRITICAL: Store the config in a ref so it's created ONCE and NEVER changes
   // This prevents useChatKit from reinitializing
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chatkitConfigRef = useRef<any>(null);
   
   if (!chatkitConfigRef.current) {
