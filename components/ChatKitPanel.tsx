@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   STARTER_PROMPTS,
@@ -55,11 +55,12 @@ export function ChatKitPanel({
   const isMountedRef = useRef(true);
   const [scriptStatus, setScriptStatus] = useState<
     "pending" | "ready" | "error"
-  >(() =>
-    isBrowser && window.customElements?.get("openai-chatkit")
-      ? "ready"
-      : "pending"
-  );
+  >(() => {
+    if (!isBrowser) return "pending";
+    const isReady = window.customElements?.get("openai-chatkit");
+    console.log("[ChatKitPanel] Initial script status check:", { isReady, customElements: !!window.customElements });
+    return isReady ? "ready" : "pending";
+  });
   const [widgetInstanceKey, setWidgetInstanceKey] = useState(0);
 
   const setErrorState = useCallback((updates: Partial<ErrorState>) => {
@@ -105,10 +106,13 @@ export function ChatKitPanel({
     );
 
     if (window.customElements?.get("openai-chatkit")) {
+      console.log("[ChatKitPanel] Script already loaded, calling handleLoaded");
       handleLoaded();
     } else if (scriptStatus === "pending") {
+      console.log("[ChatKitPanel] Script not ready, setting timeout");
       timeoutId = window.setTimeout(() => {
         if (!window.customElements?.get("openai-chatkit")) {
+          console.log("[ChatKitPanel] Script timeout - component not available");
           handleError(
             new CustomEvent("chatkit-script-error", {
               detail:
@@ -159,12 +163,17 @@ export function ChatKitPanel({
 
   const getClientSecret = useCallback(
     async (currentSecret: string | null) => {
-      if (isDev) {
-        console.info("[ChatKitPanel] getClientSecret invoked", {
-          currentSecretPresent: Boolean(currentSecret),
-          workflowId: WORKFLOW_ID,
-          endpoint: CREATE_SESSION_ENDPOINT,
-        });
+      console.log("[ChatKitPanel] getClientSecret invoked", {
+        currentSecretPresent: Boolean(currentSecret),
+        workflowId: WORKFLOW_ID,
+        endpoint: CREATE_SESSION_ENDPOINT,
+        isWorkflowConfigured,
+      });
+
+      // If we already have a secret, return it immediately
+      if (currentSecret) {
+        console.log("[ChatKitPanel] Using existing client secret");
+        return currentSecret;
       }
 
       if (!isWorkflowConfigured) {
@@ -178,9 +187,7 @@ export function ChatKitPanel({
       }
 
       if (isMountedRef.current) {
-        if (!currentSecret) {
-          setIsInitializingSession(true);
-        }
+        setIsInitializingSession(true);
         setErrorState({ session: null, integration: null, retryable: false });
       }
 
@@ -203,13 +210,11 @@ export function ChatKitPanel({
 
         const raw = await response.text();
 
-        if (isDev) {
-          console.info("[ChatKitPanel] createSession response", {
-            status: response.status,
-            ok: response.ok,
-            bodyPreview: raw.slice(0, 1600),
-          });
-        }
+        console.log("[ChatKitPanel] createSession response", {
+          status: response.status,
+          ok: response.ok,
+          bodyPreview: raw.slice(0, 1600),
+        });
 
         let data: Record<string, unknown> = {};
         if (raw) {
@@ -241,6 +246,7 @@ export function ChatKitPanel({
           setErrorState({ session: null, integration: null });
         }
 
+        console.log("[ChatKitPanel] Client secret received, ChatKit should initialize now");
         return clientSecret;
       } catch (error) {
         console.error("Failed to create ChatKit session", error);
@@ -253,7 +259,7 @@ export function ChatKitPanel({
         }
         throw error instanceof Error ? error : new Error(detail);
       } finally {
-        if (isMountedRef.current && !currentSecret) {
+        if (isMountedRef.current) {
           setIsInitializingSession(false);
         }
       }
@@ -261,7 +267,8 @@ export function ChatKitPanel({
     [isWorkflowConfigured, setErrorState]
   );
 
-  const chatkit = useChatKit({
+  // Memoize the ChatKit configuration to prevent re-initialization
+  const chatkitConfig = useMemo(() => ({
     api: { getClientSecret },
     theme: {
       colorScheme: theme,
@@ -328,32 +335,99 @@ export function ChatKitPanel({
       // Thus, your app code doesn't need to display errors on UI.
       console.error("ChatKit error", error);
     },
-  });
+  }), [getClientSecret, theme, onThemeRequest, onWidgetAction, onResponseEnd, setErrorState]);
+
+  const chatkit = useChatKit(chatkitConfig);
 
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
 
-  if (isDev) {
-    console.debug("[ChatKitPanel] render state", {
-      isInitializingSession,
-      hasControl: Boolean(chatkit.control),
-      scriptStatus,
-      hasError: Boolean(blockingError),
-      workflowId: WORKFLOW_ID,
-    });
-  }
+  console.log("[ChatKitPanel] render state", {
+    isInitializingSession,
+    hasControl: Boolean(chatkit.control),
+    scriptStatus,
+    hasError: Boolean(blockingError),
+    workflowId: WORKFLOW_ID,
+    blockingError,
+    widgetInstanceKey,
+    willShowChatKit: Boolean(chatkit.control),
+    willShowFallback: !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
+  });
+
+  // Remove force re-initialization that causes infinite loops
+  // Let ChatKit initialize naturally
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    if (isInitializingSession) {
+      const timeout = setTimeout(() => {
+        console.log("[ChatKitPanel] Timeout reached - ending initialization");
+        setIsInitializingSession(false);
+      }, 15000); // 15 second timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [isInitializingSession]);
+
+  // Force ChatKit to render when control is available
+  useEffect(() => {
+    if (chatkit.control && isInitializingSession) {
+      console.log("[ChatKitPanel] ChatKit control available - ending initialization");
+      setIsInitializingSession(false);
+    }
+  }, [chatkit.control, isInitializingSession]);
+
+  // Remove the force re-render that's causing the infinite loop
+  // The ChatKit component should render naturally when control is available
+
+  // Track if ChatKit has ever been successfully initialized
+  const [hasInitialized, setHasInitialized] = useState(false);
+  
+  useEffect(() => {
+    if (chatkit.control && !hasInitialized) {
+      console.log("[ChatKitPanel] ChatKit successfully initialized");
+      setHasInitialized(true);
+    }
+  }, [chatkit.control, hasInitialized]);
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
-      <ChatKit
-        key={widgetInstanceKey}
-        control={chatkit.control}
-        className={
-          blockingError || isInitializingSession
-            ? "pointer-events-none opacity-0"
-            : "block h-full w-full"
-        }
-      />
+      {/* Show ChatKit if it has control OR if it has been initialized before */}
+      {(chatkit.control || hasInitialized) && (
+        <ChatKit
+          key={widgetInstanceKey}
+          control={chatkit.control}
+          style={{
+            minHeight: "400px",
+            width: "100%",
+            display: "block",
+            position: "relative",
+            zIndex: 1
+          }}
+        />
+      )}
+      
+      {/* Fallback UI - only show if ChatKit has never been initialized */}
+      {!hasInitialized && !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError && (
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="text-center">
+            <div className="mb-4 text-6xl">🤖</div>
+            <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
+              AI Buddy is Ready!
+            </h2>
+            <p className="mb-4 text-gray-600 dark:text-gray-300">
+              The chat interface should appear here. If you don&apos;t see it, try refreshing the page.
+            </p>
+            <button
+              onClick={handleResetChat}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+            >
+              Restart Chat
+            </button>
+          </div>
+        </div>
+      )}
+      
       <ErrorOverlay
         error={blockingError}
         fallbackMessage={
