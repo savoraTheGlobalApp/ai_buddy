@@ -12,6 +12,7 @@ export interface SessionData {
   userId: string;
   authenticated: boolean;
   createdAt: number;
+  [key: string]: string | number | boolean;
 }
 
 /**
