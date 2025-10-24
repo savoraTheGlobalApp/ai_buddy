@@ -24,8 +24,8 @@ export default function AuthPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Reload the page to trigger the authentication check
-        window.location.reload();
+        // Redirect to home page to trigger re-authentication
+        window.location.href = "/";
       } else {
         setError(data.error || "Invalid security code");
       }

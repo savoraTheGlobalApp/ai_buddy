@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import LogoutButton from "@/components/LogoutButton";
@@ -8,17 +8,23 @@ import AuthPage from "@/components/AuthPage";
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
-  const [authState, setAuthState] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const hasCheckedAuth = useRef(false);
 
   useEffect(() => {
-    // Check authentication on mount
+    // Only check authentication once
+    if (hasCheckedAuth.current) return;
+    hasCheckedAuth.current = true;
+
     fetch("/api/check-auth", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
-        setAuthState(data.authenticated ? "authenticated" : "unauthenticated");
+        console.log("[App] Auth check result:", data.authenticated);
+        setIsAuthenticated(data.authenticated);
       })
-      .catch(() => {
-        setAuthState("unauthenticated");
+      .catch((error) => {
+        console.error("[App] Auth check error:", error);
+        setIsAuthenticated(false);
       });
   }, []);
 
@@ -35,7 +41,7 @@ export default function App() {
   }, []);
 
   // Show loading state while checking authentication
-  if (authState === "loading") {
+  if (isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -44,25 +50,28 @@ export default function App() {
   }
 
   // Show auth page if not authenticated
-  if (authState === "unauthenticated") {
+  if (!isAuthenticated) {
     return <AuthPage />;
   }
 
   // Show the main chat interface when authenticated
+  console.log("[App] Rendering authenticated chat interface");
   return (
     <main className="flex min-h-screen flex-col items-center justify-end bg-slate-100 dark:bg-slate-950">
-      <div className="mx-auto w-full max-w-5xl">
+      <div className="mx-auto w-full max-w-5xl h-screen flex flex-col">
         {/* Header with Logout Button */}
-        <div className="flex justify-end items-center p-4">
+        <div className="flex justify-end items-center p-4 flex-shrink-0">
           <LogoutButton />
         </div>
         
-        <ChatKitPanel
-          theme={scheme}
-          onWidgetAction={handleWidgetAction}
-          onResponseEnd={handleResponseEnd}
-          onThemeRequest={setScheme}
-        />
+        <div className="flex-1 pb-8">
+          <ChatKitPanel
+            theme={scheme}
+            onWidgetAction={handleWidgetAction}
+            onResponseEnd={handleResponseEnd}
+            onThemeRequest={setScheme}
+          />
+        </div>
       </div>
     </main>
   );
