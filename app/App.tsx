@@ -57,21 +57,20 @@ export default function App() {
   // Show the main chat interface when authenticated
   console.log("[App] Rendering authenticated chat interface");
   return (
-    <main className="flex min-h-screen flex-col items-center justify-end bg-slate-100 dark:bg-slate-950">
-      <div className="mx-auto w-full max-w-5xl h-screen flex flex-col">
-        {/* Header with Logout Button */}
-        <div className="flex justify-end items-center p-4 flex-shrink-0">
-          <LogoutButton />
-        </div>
-        
-        <div className="flex-1 pb-8">
-          <ChatKitPanel
-            theme={scheme}
-            onWidgetAction={handleWidgetAction}
-            onResponseEnd={handleResponseEnd}
-            onThemeRequest={setScheme}
-          />
-        </div>
+    <main className="flex min-h-screen flex-col items-center bg-slate-100 dark:bg-slate-950 p-4">
+      {/* Header with Logout Button */}
+      <div className="w-full max-w-5xl flex justify-end items-center mb-4">
+        <LogoutButton />
+      </div>
+      
+      {/* Chat Interface */}
+      <div className="w-full max-w-5xl">
+        <ChatKitPanel
+          theme={scheme}
+          onWidgetAction={handleWidgetAction}
+          onResponseEnd={handleResponseEnd}
+          onThemeRequest={setScheme}
+        />
       </div>
     </main>
   );
