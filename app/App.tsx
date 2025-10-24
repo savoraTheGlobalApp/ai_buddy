@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import LogoutButton from "@/components/LogoutButton";
@@ -8,24 +8,38 @@ import AuthPage from "@/components/AuthPage";
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const hasCheckedAuth = useRef(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Only check authentication once
-    if (hasCheckedAuth.current) return;
-    hasCheckedAuth.current = true;
-
+    // Check authentication only once on mount
+    let mounted = true;
+    
     fetch("/api/check-auth", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
-        console.log("[App] Auth check result:", data.authenticated);
-        setIsAuthenticated(data.authenticated);
+        if (mounted) {
+          console.log("[App] Initial auth check:", data.authenticated);
+          setIsAuthenticated(data.authenticated);
+          setAuthChecked(true);
+        }
       })
       .catch((error) => {
-        console.error("[App] Auth check error:", error);
-        setIsAuthenticated(false);
+        if (mounted) {
+          console.error("[App] Auth check error:", error);
+          setIsAuthenticated(false);
+          setAuthChecked(true);
+        }
       });
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array - only run once
+
+  const handleAuthSuccess = useCallback(() => {
+    console.log("[App] Authentication successful, showing chat");
+    setIsAuthenticated(true);
   }, []);
 
   const handleWidgetAction = useCallback(async (action: FactAction) => {
@@ -41,7 +55,7 @@ export default function App() {
   }, []);
 
   // Show loading state while checking authentication
-  if (isAuthenticated === null) {
+  if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -51,11 +65,11 @@ export default function App() {
 
   // Show auth page if not authenticated
   if (!isAuthenticated) {
-    return <AuthPage />;
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
   }
 
   // Show the main chat interface when authenticated
-  console.log("[App] Rendering authenticated chat interface");
+  console.log("[App] Rendering chat interface");
   return (
     <main className="flex min-h-screen flex-col items-center bg-slate-100 dark:bg-slate-950 p-4">
       {/* Header with Logout Button */}

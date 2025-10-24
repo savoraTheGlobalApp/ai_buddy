@@ -2,7 +2,11 @@
 
 import { useState, FormEvent } from "react";
 
-export default function AuthPage() {
+interface AuthPageProps {
+  onAuthSuccess?: () => void;
+}
+
+export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,8 +28,13 @@ export default function AuthPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Redirect to home page to trigger re-authentication
-        window.location.href = "/";
+        // Call the success callback instead of reloading
+        if (onAuthSuccess) {
+          onAuthSuccess();
+        } else {
+          // Fallback to reload if no callback provided
+          window.location.href = "/";
+        }
       } else {
         setError(data.error || "Invalid security code");
       }
