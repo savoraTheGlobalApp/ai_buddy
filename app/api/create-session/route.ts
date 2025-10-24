@@ -50,6 +50,13 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
+    // Log usage for analytics (optional - you can expand this)
+    console.info("[Usage] session creation attempt", {
+      userId,
+      workflowId: resolvedWorkflowId,
+      timestamp: new Date().toISOString(),
+    });
+
     if (!resolvedWorkflowId) {
       return buildJsonResponse(
         { error: "Missing workflow id" },
