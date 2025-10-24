@@ -8,19 +8,17 @@ import AuthPage from "@/components/AuthPage";
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
-  const [showAuth, setShowAuth] = useState(true);
+  const [authState, setAuthState] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
 
   useEffect(() => {
     // Check authentication on mount
     fetch("/api/check-auth", { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {
-        if (data.authenticated) {
-          setShowAuth(false);
-        }
+        setAuthState(data.authenticated ? "authenticated" : "unauthenticated");
       })
       .catch(() => {
-        setShowAuth(true);
+        setAuthState("unauthenticated");
       });
   }, []);
 
@@ -36,31 +34,36 @@ export default function App() {
     }
   }, []);
 
-  return (
-    <>
-      {/* Auth overlay - shown on top when not authenticated */}
-      {showAuth && (
-        <div className="fixed inset-0 z-50 bg-white">
-          <AuthPage />
-        </div>
-      )}
+  // Show loading state while checking authentication
+  if (authState === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
-      {/* Main app - always mounted */}
-      <main className="flex min-h-screen flex-col items-center justify-end bg-slate-100 dark:bg-slate-950">
-        <div className="mx-auto w-full max-w-5xl">
-          {/* Header with Logout Button */}
-          <div className="flex justify-end items-center p-4">
-            <LogoutButton />
-          </div>
-          
-          <ChatKitPanel
-            theme={scheme}
-            onWidgetAction={handleWidgetAction}
-            onResponseEnd={handleResponseEnd}
-            onThemeRequest={setScheme}
-          />
+  // Show auth page if not authenticated
+  if (authState === "unauthenticated") {
+    return <AuthPage />;
+  }
+
+  // Show the main chat interface when authenticated
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-end bg-slate-100 dark:bg-slate-950">
+      <div className="mx-auto w-full max-w-5xl">
+        {/* Header with Logout Button */}
+        <div className="flex justify-end items-center p-4">
+          <LogoutButton />
         </div>
-      </main>
-    </>
+        
+        <ChatKitPanel
+          theme={scheme}
+          onWidgetAction={handleWidgetAction}
+          onResponseEnd={handleResponseEnd}
+          onThemeRequest={setScheme}
+        />
+      </div>
+    </main>
   );
 }
