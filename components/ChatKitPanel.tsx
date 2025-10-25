@@ -52,7 +52,19 @@ export function ChatKitPanel({
 }: ChatKitPanelProps) {
   const processedFacts = useRef(new Set<string>());
   const [errors, setErrors] = useState<ErrorState>(() => createInitialErrors());
-  const [isInitializingSession, setIsInitializingSession] = useState(true);
+  const [isInitializingSession, setIsInitializingSessionInternal] = useState(true);
+  
+  // Wrapper to prevent state changes when locked
+  const setIsInitializingSession = useCallback((value: boolean) => {
+    if (isFullyInitializedRef.current && value === true) {
+      console.error("[ChatKitPanel] ❌ BLOCKED: Attempt to set isInitializingSession=true when LOCKED!");
+      console.trace("Call stack:");
+      return; // Block the state change!
+    }
+    
+    console.log(`[ChatKitPanel] isInitializingSession → ${value}`);
+    setIsInitializingSessionInternal(value);
+  }, []);
   const isMountedRef = useRef(true);
   const [scriptStatus, setScriptStatus] = useState<
     "pending" | "ready" | "error"
@@ -172,20 +184,19 @@ export function ChatKitPanel({
 
   const getClientSecret = useCallback(
     async (currentSecret: string | null) => {
-      console.log("[ChatKitPanel] getClientSecret invoked", {
+      const callStack = new Error().stack;
+      console.log("[ChatKitPanel] ⚠️ getClientSecret CALLED", {
         currentSecretPresent: Boolean(currentSecret),
         cachedSecretPresent: Boolean(clientSecretRef.current),
         fullyInitialized: isFullyInitializedRef.current,
-        workflowId: WORKFLOW_ID,
-        endpoint: CREATE_SESSION_ENDPOINT,
-        isWorkflowConfigured,
         isInitializing: isInitializingRef.current,
+        callStack: callStack?.split('\n').slice(0, 5).join('\n'),
       });
 
       // CRITICAL: If ChatKit is fully initialized, ALWAYS return cached secret
       // This prevents any re-initialization after stable state
       if (isFullyInitializedRef.current && clientSecretRef.current) {
-        console.log("[ChatKitPanel] ChatKit is stable - returning cached secret (preventing re-init)");
+        console.log("[ChatKitPanel] ✅ LOCKED - returning cached secret (NO state changes)");
         return clientSecretRef.current;
       }
 
@@ -213,7 +224,7 @@ export function ChatKitPanel({
       }
 
       isInitializingRef.current = true;
-      console.log("[ChatKitPanel] Creating NEW session (first time initialization)");
+      console.log("[ChatKitPanel] 🆕 Creating NEW session (first time initialization)");
 
       if (!isWorkflowConfigured) {
         const detail =
@@ -225,9 +236,13 @@ export function ChatKitPanel({
         throw new Error(detail);
       }
 
-      if (isMountedRef.current) {
+      // CRITICAL: Don't set isInitializingSession if already initialized
+      if (isMountedRef.current && !isFullyInitializedRef.current) {
+        console.log("[ChatKitPanel] Setting isInitializingSession = true");
         setIsInitializingSession(true);
         setErrorState({ session: null, integration: null, retryable: false });
+      } else if (isFullyInitializedRef.current) {
+        console.error("[ChatKitPanel] ❌ SHOULD NOT REACH HERE - ChatKit is locked but creating new session!");
       }
 
       try {
@@ -456,10 +471,14 @@ export function ChatKitPanel({
       // Don't wait for stability timer - lock right away!
       setTimeout(() => {
         if (!isFullyInitializedRef.current) {
-          console.log("[ChatKitPanel] 🔒 LOCKING to prevent re-initialization");
+          console.log("[ChatKitPanel] 🔒🔒🔒 LOCK ENGAGED - NO MORE STATE CHANGES ALLOWED! 🔒🔒🔒");
           isFullyInitializedRef.current = true;
+          debugLog('ChatKitPanel - LOCKED', {
+            message: 'ChatKit is now LOCKED and stable',
+            timestamp: new Date().toISOString()
+          });
         }
-      }, 100); // Lock after just 100ms to allow initial setup
+      }, 50); // Lock after just 50ms to allow initial setup
     }
   }, [chatkit.control, hasInitialized]);
 
