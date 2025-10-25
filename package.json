@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@openai/chatkit-react": ">=1.1.1 <2.0.0",
+    "firebase-admin": "^12.7.0",
+    "jose": "^5.9.6",
     "next": "^15.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
