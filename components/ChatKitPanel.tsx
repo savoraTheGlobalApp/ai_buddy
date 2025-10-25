@@ -12,6 +12,7 @@ import {
 } from "@/lib/config";
 import { ErrorOverlay } from "./ErrorOverlay";
 import type { ColorScheme } from "@/hooks/useColorScheme";
+import { debugLog } from "./DebugPanel";
 
 export type FactAction = {
   type: "save";
@@ -339,19 +340,39 @@ export function ChatKitPanel({
 
   const chatkit = useChatKit(chatkitConfig);
 
+  // Track if ChatKit has ever been successfully initialized
+  // MUST be declared before usage below
+  const [hasInitialized, setHasInitialized] = useState(false);
+
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
 
   console.log("[ChatKitPanel] render state", {
     isInitializingSession,
     hasControl: Boolean(chatkit.control),
+    hasInitialized,
     scriptStatus,
     hasError: Boolean(blockingError),
     workflowId: WORKFLOW_ID,
     blockingError,
     widgetInstanceKey,
-    willShowChatKit: Boolean(chatkit.control),
-    willShowFallback: !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
+    willShowChatKit: Boolean(chatkit.control) || hasInitialized,
+    willShowFallback: !hasInitialized && !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
+  });
+
+  // Log debug info in useEffect to avoid state updates during render
+  useEffect(() => {
+    debugLog('ChatKitPanel - Render State', {
+      isInitializingSession,
+      hasControl: Boolean(chatkit.control),
+      hasInitialized,
+      scriptStatus,
+      hasError: Boolean(blockingError),
+      blockingError,
+      widgetInstanceKey,
+      willRenderChatKit: chatkit.control || hasInitialized,
+      willRenderFallback: !hasInitialized && !chatkit.control && scriptStatus === "ready" && !isInitializingSession && !blockingError
+    });
   });
 
   // Remove force re-initialization that causes infinite loops
@@ -377,15 +398,15 @@ export function ChatKitPanel({
     }
   }, [chatkit.control, isInitializingSession]);
 
-  // Remove the force re-render that's causing the infinite loop
-  // The ChatKit component should render naturally when control is available
-
-  // Track if ChatKit has ever been successfully initialized
-  const [hasInitialized, setHasInitialized] = useState(false);
-  
+  // Track initialization status
   useEffect(() => {
     if (chatkit.control && !hasInitialized) {
       console.log("[ChatKitPanel] ChatKit successfully initialized");
+      debugLog('ChatKitPanel - Initialization', {
+        status: 'initialized',
+        hasControl: true,
+        hasInitialized: false
+      });
       setHasInitialized(true);
     }
   }, [chatkit.control, hasInitialized]);
