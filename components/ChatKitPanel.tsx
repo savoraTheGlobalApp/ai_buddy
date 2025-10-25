@@ -150,8 +150,14 @@ export function ChatKitPanel({
     }
   }, [isWorkflowConfigured, setErrorState]);
 
+  // Use refs to track initialization state and cache client secret
+  const isInitializingRef = useRef(false);
+  const clientSecretRef = useRef<string | null>(null);
+
   const handleResetChat = useCallback(() => {
     processedFacts.current.clear();
+    clientSecretRef.current = null; // Clear cached secret
+    isInitializingRef.current = false; // Reset initialization flag
     if (isBrowser) {
       setScriptStatus(
         window.customElements?.get("openai-chatkit") ? "ready" : "pending"
@@ -166,16 +172,37 @@ export function ChatKitPanel({
     async (currentSecret: string | null) => {
       console.log("[ChatKitPanel] getClientSecret invoked", {
         currentSecretPresent: Boolean(currentSecret),
+        cachedSecretPresent: Boolean(clientSecretRef.current),
         workflowId: WORKFLOW_ID,
         endpoint: CREATE_SESSION_ENDPOINT,
         isWorkflowConfigured,
+        isInitializing: isInitializingRef.current,
       });
 
-      // If we already have a secret, return it immediately
+      // If we already have a secret (from ChatKit or our cache), return it immediately
       if (currentSecret) {
-        console.log("[ChatKitPanel] Using existing client secret");
+        console.log("[ChatKitPanel] Using existing client secret from ChatKit");
+        clientSecretRef.current = currentSecret;
         return currentSecret;
       }
+
+      // If we have a cached secret, return it
+      if (clientSecretRef.current) {
+        console.log("[ChatKitPanel] Using cached client secret");
+        return clientSecretRef.current;
+      }
+
+      // Prevent concurrent initialization attempts
+      if (isInitializingRef.current) {
+        console.log("[ChatKitPanel] Already initializing, waiting...");
+        // Wait a bit and return cached secret if available
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (clientSecretRef.current) {
+          return clientSecretRef.current;
+        }
+      }
+
+      isInitializingRef.current = true;
 
       if (!isWorkflowConfigured) {
         const detail =
@@ -247,7 +274,10 @@ export function ChatKitPanel({
           setErrorState({ session: null, integration: null });
         }
 
-        console.log("[ChatKitPanel] Client secret received, ChatKit should initialize now");
+        // Cache the client secret
+        clientSecretRef.current = clientSecret;
+
+        console.log("[ChatKitPanel] Client secret received and cached, ChatKit should initialize now");
         return clientSecret;
       } catch (error) {
         console.error("Failed to create ChatKit session", error);
@@ -260,6 +290,7 @@ export function ChatKitPanel({
         }
         throw error instanceof Error ? error : new Error(detail);
       } finally {
+        isInitializingRef.current = false;
         if (isMountedRef.current) {
           setIsInitializingSession(false);
         }
