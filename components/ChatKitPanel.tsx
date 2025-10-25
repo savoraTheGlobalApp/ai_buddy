@@ -441,7 +441,7 @@ export function ChatKitPanel({
     }
   }, [chatkit.control, isInitializingSession]);
 
-  // Track initialization status
+  // Track initialization status and IMMEDIATELY lock to prevent re-initialization
   useEffect(() => {
     if (chatkit.control && !hasInitialized) {
       console.log("[ChatKitPanel] ChatKit successfully initialized");
@@ -451,22 +451,17 @@ export function ChatKitPanel({
         hasInitialized: false
       });
       setHasInitialized(true);
-    }
-  }, [chatkit.control, hasInitialized]);
-
-  // Mark as fully initialized once stable (after 2 seconds of stability)
-  useEffect(() => {
-    if (hasInitialized && !isInitializingSession && chatkit.control) {
-      const timer = setTimeout(() => {
+      
+      // CRITICAL: Lock IMMEDIATELY to prevent re-initialization
+      // Don't wait for stability timer - lock right away!
+      setTimeout(() => {
         if (!isFullyInitializedRef.current) {
-          console.log("[ChatKitPanel] ✅ ChatKit is FULLY STABLE - locking to prevent re-initialization");
+          console.log("[ChatKitPanel] 🔒 LOCKING to prevent re-initialization");
           isFullyInitializedRef.current = true;
         }
-      }, 2000); // 2 second stability window
-
-      return () => clearTimeout(timer);
+      }, 100); // Lock after just 100ms to allow initial setup
     }
-  }, [hasInitialized, isInitializingSession, chatkit.control]);
+  }, [chatkit.control, hasInitialized]);
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
