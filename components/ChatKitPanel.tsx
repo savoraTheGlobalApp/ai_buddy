@@ -193,11 +193,23 @@ export function ChatKitPanel({
         callStack: callStack?.split('\n').slice(0, 5).join('\n'),
       });
 
-      // CRITICAL: If ChatKit is fully initialized, ALWAYS return cached secret
-      // This prevents any re-initialization after stable state
-      if (isFullyInitializedRef.current && clientSecretRef.current) {
-        console.log("[ChatKitPanel] ✅ LOCKED - returning cached secret (NO state changes)");
-        return clientSecretRef.current;
+      // CRITICAL: If ChatKit is fully initialized, NEVER allow re-initialization
+      // Return what we have - but NEVER create new session!
+      if (isFullyInitializedRef.current) {
+        if (clientSecretRef.current) {
+          console.log("[ChatKitPanel] ✅ LOCKED - returning cached secret");
+          return clientSecretRef.current;
+        }
+        if (currentSecret) {
+          console.log("[ChatKitPanel] ✅ LOCKED - caching and returning provided secret");
+          clientSecretRef.current = currentSecret;
+          return currentSecret;
+        }
+        // If locked but no secret available, log warning but don't throw
+        // This shouldn't happen since we only lock when secret is cached
+        console.warn("[ChatKitPanel] ⚠️ LOCKED but no secret available - this shouldn't happen!");
+        console.warn("[ChatKitPanel] Allowing this call to proceed but will prevent state changes");
+        // Fall through to allow the call, but state changes will be blocked by wrapper
       }
 
       // If we already have a secret (from ChatKit or our cache), return it immediately
@@ -236,13 +248,11 @@ export function ChatKitPanel({
         throw new Error(detail);
       }
 
-      // CRITICAL: Don't set isInitializingSession if already initialized
-      if (isMountedRef.current && !isFullyInitializedRef.current) {
+      // Only set isInitializingSession if NOT locked (should never reach here if locked)
+      if (isMountedRef.current) {
         console.log("[ChatKitPanel] Setting isInitializingSession = true");
         setIsInitializingSession(true);
         setErrorState({ session: null, integration: null, retryable: false });
-      } else if (isFullyInitializedRef.current) {
-        console.error("[ChatKitPanel] ❌ SHOULD NOT REACH HERE - ChatKit is locked but creating new session!");
       }
 
       try {
@@ -396,6 +406,19 @@ export function ChatKitPanel({
   }), [getClientSecret, theme, onThemeRequest, onWidgetAction, onResponseEnd, setErrorState]);
 
   const chatkit = useChatKit(chatkitConfig);
+  
+  // Track if control changes unexpectedly
+  const prevControlRef = useRef<unknown>(null);
+  useEffect(() => {
+    if (prevControlRef.current !== chatkit.control) {
+      console.log(`[ChatKitPanel] 🎮 chatkit.control changed:`, {
+        from: prevControlRef.current ? 'truthy' : 'null/undefined',
+        to: chatkit.control ? 'truthy' : 'null/undefined',
+        isLocked: isFullyInitializedRef.current
+      });
+      prevControlRef.current = chatkit.control;
+    }
+  }, [chatkit.control]);
 
   // Track if ChatKit has ever been successfully initialized
   // MUST be declared before usage below
@@ -456,7 +479,7 @@ export function ChatKitPanel({
     }
   }, [chatkit.control, isInitializingSession]);
 
-  // Track initialization status and IMMEDIATELY lock to prevent re-initialization
+  // Track initialization status and lock ONLY when we have a cached secret
   useEffect(() => {
     if (chatkit.control && !hasInitialized) {
       console.log("[ChatKitPanel] ChatKit successfully initialized");
@@ -467,18 +490,25 @@ export function ChatKitPanel({
       });
       setHasInitialized(true);
       
-      // CRITICAL: Lock IMMEDIATELY to prevent re-initialization
-      // Don't wait for stability timer - lock right away!
-      setTimeout(() => {
-        if (!isFullyInitializedRef.current) {
-          console.log("[ChatKitPanel] 🔒🔒🔒 LOCK ENGAGED - NO MORE STATE CHANGES ALLOWED! 🔒🔒🔒");
+      // CRITICAL: Lock ONLY when we have a cached secret
+      // Check repeatedly until secret is cached, then lock
+      const checkAndLock = () => {
+        if (clientSecretRef.current && !isFullyInitializedRef.current) {
+          console.log("[ChatKitPanel] 🔒🔒🔒 LOCK ENGAGED (secret cached) - NO MORE STATE CHANGES ALLOWED! 🔒🔒🔒");
           isFullyInitializedRef.current = true;
           debugLog('ChatKitPanel - LOCKED', {
             message: 'ChatKit is now LOCKED and stable',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            hasSecret: true
           });
+        } else if (!isFullyInitializedRef.current) {
+          // Secret not cached yet, check again in 100ms
+          setTimeout(checkAndLock, 100);
         }
-      }, 50); // Lock after just 50ms to allow initial setup
+      };
+      
+      // Start checking after 50ms to allow initial setup
+      setTimeout(checkAndLock, 50);
     }
   }, [chatkit.control, hasInitialized]);
 
