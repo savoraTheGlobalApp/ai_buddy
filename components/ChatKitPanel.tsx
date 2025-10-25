@@ -153,11 +153,13 @@ export function ChatKitPanel({
   // Use refs to track initialization state and cache client secret
   const isInitializingRef = useRef(false);
   const clientSecretRef = useRef<string | null>(null);
+  const isFullyInitializedRef = useRef(false); // Track if ChatKit is fully stable
 
   const handleResetChat = useCallback(() => {
     processedFacts.current.clear();
     clientSecretRef.current = null; // Clear cached secret
     isInitializingRef.current = false; // Reset initialization flag
+    isFullyInitializedRef.current = false; // Reset fully initialized flag
     if (isBrowser) {
       setScriptStatus(
         window.customElements?.get("openai-chatkit") ? "ready" : "pending"
@@ -173,11 +175,19 @@ export function ChatKitPanel({
       console.log("[ChatKitPanel] getClientSecret invoked", {
         currentSecretPresent: Boolean(currentSecret),
         cachedSecretPresent: Boolean(clientSecretRef.current),
+        fullyInitialized: isFullyInitializedRef.current,
         workflowId: WORKFLOW_ID,
         endpoint: CREATE_SESSION_ENDPOINT,
         isWorkflowConfigured,
         isInitializing: isInitializingRef.current,
       });
+
+      // CRITICAL: If ChatKit is fully initialized, ALWAYS return cached secret
+      // This prevents any re-initialization after stable state
+      if (isFullyInitializedRef.current && clientSecretRef.current) {
+        console.log("[ChatKitPanel] ChatKit is stable - returning cached secret (preventing re-init)");
+        return clientSecretRef.current;
+      }
 
       // If we already have a secret (from ChatKit or our cache), return it immediately
       if (currentSecret) {
@@ -203,6 +213,7 @@ export function ChatKitPanel({
       }
 
       isInitializingRef.current = true;
+      console.log("[ChatKitPanel] Creating NEW session (first time initialization)");
 
       if (!isWorkflowConfigured) {
         const detail =
@@ -397,6 +408,7 @@ export function ChatKitPanel({
       isInitializingSession,
       hasControl: Boolean(chatkit.control),
       hasInitialized,
+      isFullyStable: isFullyInitializedRef.current,
       scriptStatus,
       hasError: Boolean(blockingError),
       blockingError,
@@ -441,6 +453,20 @@ export function ChatKitPanel({
       setHasInitialized(true);
     }
   }, [chatkit.control, hasInitialized]);
+
+  // Mark as fully initialized once stable (after 2 seconds of stability)
+  useEffect(() => {
+    if (hasInitialized && !isInitializingSession && chatkit.control) {
+      const timer = setTimeout(() => {
+        if (!isFullyInitializedRef.current) {
+          console.log("[ChatKitPanel] ✅ ChatKit is FULLY STABLE - locking to prevent re-initialization");
+          isFullyInitializedRef.current = true;
+        }
+      }, 2000); // 2 second stability window
+
+      return () => clearTimeout(timer);
+    }
+  }, [hasInitialized, isInitializingSession, chatkit.control]);
 
   return (
     <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
